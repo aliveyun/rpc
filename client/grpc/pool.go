@@ -83,7 +83,7 @@ func newPool(size int, ttl time.Duration, idle int, ms int) *Pool {
 }
 
 func (p *Pool) Close() error {
-	p.Lock()
+	//p.Lock()
 	for k, c := range p.conns {
 		// for _, conn := range c {
 		// 	conn.Client.Close()
@@ -94,7 +94,7 @@ func (p *Pool) Close() error {
 		}
 		delete(p.conns, k)
 	}
-	p.Unlock()
+	//p.Unlock()
 	return nil
 }
 
