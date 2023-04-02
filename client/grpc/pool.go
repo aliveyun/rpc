@@ -24,7 +24,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 )
 
-type pool struct {
+type Pool struct {
 	size int
 	ttl  int64
 
@@ -55,7 +55,7 @@ type poolConn struct {
 	addr string
 
 	//  pool and streams pool
-	pool    *pool
+	pool    *Pool
 	sp      *streamsPool
 	streams int
 	created int64
@@ -66,14 +66,14 @@ type poolConn struct {
 	in   bool
 }
 
-func newPool(size int, ttl time.Duration, idle int, ms int) *pool {
+func newPool(size int, ttl time.Duration, idle int, ms int) *Pool {
 	if ms <= 0 {
 		ms = 1
 	}
 	if idle < 0 {
 		idle = 0
 	}
-	return &pool{
+	return &Pool{
 		size:       size,
 		ttl:        int64(ttl.Seconds()),
 		maxStreams: ms,
@@ -82,7 +82,23 @@ func newPool(size int, ttl time.Duration, idle int, ms int) *pool {
 	}
 }
 
-func (p *pool) getConn(addr string, opts ...grpc.DialOption) (*poolConn, error) {
+func (p *Pool) Close() error {
+	p.Lock()
+	for k, c := range p.conns {
+		// for _, conn := range c {
+		// 	conn.Client.Close()
+		// }
+		conn := c.head.next
+		for conn != nil {
+			conn.Close()
+		}
+		delete(p.conns, k)
+	}
+	p.Unlock()
+	return nil
+}
+
+func (p *Pool) getConn(addr string, opts ...grpc.DialOption) (*poolConn, error) {
 	now := time.Now().Unix()
 	p.Lock()
 	sp, ok := p.conns[addr]
@@ -167,7 +183,7 @@ func (p *pool) getConn(addr string, opts ...grpc.DialOption) (*poolConn, error) 
 	return conn, nil
 }
 
-func (p *pool) release(addr string, conn *poolConn, err error) {
+func (p *Pool) release(addr string, conn *poolConn, err error) {
 	p.Lock()
 	p, sp, created := conn.pool, conn.sp, conn.created
 	//  try to add conn

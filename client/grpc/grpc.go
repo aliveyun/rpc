@@ -41,7 +41,7 @@ import (
 
 type grpcClient struct {
 	opts client.Options
-	pool *pool
+	Pool *Pool
 	once atomic.Value
 }
 
@@ -129,13 +129,13 @@ func (g *grpcClient) call(ctx context.Context, addr string, req client.Request, 
 		grpcDialOptions = append(grpcDialOptions, opts...)
 	}
 
-	cc, err := g.pool.getConn(addr, grpcDialOptions...)
+	cc, err := g.Pool.getConn(addr, grpcDialOptions...)
 	if err != nil {
 		return errors.InternalServerError("go.micro.client", fmt.Sprintf("Error sending request: %v", err))
 	}
 	defer func() {
 		// defer execution of release
-		g.pool.release(addr, cc, grr)
+		g.Pool.release(addr, cc, grr)
 	}()
 
 	ch := make(chan error, 1)
@@ -206,7 +206,7 @@ func (g *grpcClient) stream(ctx context.Context, addr string, req client.Request
 		grpcDialOptions = append(grpcDialOptions, opts...)
 	}
 
-	cc, err := g.pool.getConn(addr, grpcDialOptions...)
+	cc, err := g.Pool.getConn(addr, grpcDialOptions...)
 	if err != nil {
 		return errors.InternalServerError("go.micro.client", fmt.Sprintf("Error sending request: %v", err))
 	}
@@ -234,7 +234,7 @@ func (g *grpcClient) stream(ctx context.Context, addr string, req client.Request
 		// cancel the context
 		cancel()
 		// release the connection
-		g.pool.release(addr, cc, err)
+		g.Pool.release(addr, cc, err)
 		// now return the error
 		return errors.InternalServerError("go.micro.client", fmt.Sprintf("Error creating stream: %v", err))
 	}
@@ -268,7 +268,7 @@ func (g *grpcClient) stream(ctx context.Context, addr string, req client.Request
 			}
 
 			// defer execution of release
-			g.pool.release(addr, cc, err)
+			g.Pool.release(addr, cc, err)
 		},
 	}
 
@@ -348,10 +348,10 @@ func (g *grpcClient) Init(opts ...client.Option) error {
 
 	// update pool configuration if the options changed
 	if size != g.opts.PoolSize || ttl != g.opts.PoolTTL {
-		g.pool.Lock()
-		g.pool.size = g.opts.PoolSize
-		g.pool.ttl = int64(g.opts.PoolTTL.Seconds())
-		g.pool.Unlock()
+		g.Pool.Lock()
+		g.Pool.size = g.opts.PoolSize
+		g.Pool.ttl = int64(g.opts.PoolTTL.Seconds())
+		g.Pool.Unlock()
 	}
 
 	return nil
@@ -720,7 +720,7 @@ func (g *grpcClient) getGrpcCallOptions() []grpc.CallOption {
 	return opts
 }
 
-func newClient(opts ...client.Option) client.Client {
+func newClient(opts ...client.Option) (client.Client, *Pool)  {
 	options := client.NewOptions()
 	// default content type for grpc
 	options.ContentType = "application/grpc+proto"
@@ -734,7 +734,7 @@ func newClient(opts ...client.Option) client.Client {
 	}
 	rc.once.Store(false)
 
-	rc.pool = newPool(options.PoolSize, options.PoolTTL, rc.poolMaxIdle(), rc.poolMaxStreams())
+	rc.Pool = newPool(options.PoolSize, options.PoolTTL, rc.poolMaxIdle(), rc.poolMaxStreams())
 
 	c := client.Client(rc)
 
@@ -743,9 +743,13 @@ func newClient(opts ...client.Option) client.Client {
 		c = options.Wrappers[i-1](c)
 	}
 
-	return c
+	return c,rc.Pool
 }
 
-func NewClient(opts ...client.Option) client.Client {
+func NewClient(opts ...client.Option) (client.Client, *Pool)    {
 	return newClient(opts...)
+}
+
+func Close( pool *Pool)     {
+	pool.Close()
 }
