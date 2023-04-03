@@ -91,6 +91,7 @@ func (p *Pool) Close() error {
 		conn := c.head.next
 		for conn != nil {
 			conn.Close()
+			conn = conn.next
 		}
 		delete(p.conns, k)
 	}
