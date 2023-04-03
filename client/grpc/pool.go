@@ -17,6 +17,7 @@
 package grpc
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -90,7 +91,10 @@ func (p *Pool) Close() error {
 		// }
 		conn := c.head.next
 		for conn != nil {
+			conn.streams =1
+			conn.err=fmt.Errorf("e")
 			conn.Close()
+			//conn.ClientConn.Close()
 			conn = conn.next
 		}
 		delete(p.conns, k)
@@ -201,7 +205,9 @@ func (p *Pool) release(addr string, conn *poolConn, err error) {
 		removeConn(conn)
 		addConnAfter(conn, sp.head)
 	}
+	//fmt.Println("kkkkk",conn)
 	conn.streams--
+	//fmt.Println("kkkkk",conn.streams ,sp.idle,p.maxIdle  ,err)
 	//  if streams == 0, we can do something
 	if conn.streams == 0 {
 		//  1. it has errored
